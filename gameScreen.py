@@ -9,19 +9,7 @@ def makeCMUImage(app, name):
     return CMUImage(image)
 
 '''
-Citations:
-Robyn Speer. (2022). rspeer/wordfreq: v3.0 (v3.0.2). Zenodo. https://doi.org/10.5281/zenodo.7199437
-
-
-Level Settings:
-score = speed * 50 + length of word * 20
-every object passed, score -= int(20 * (2/speed))
-Level 1: 
-    waitTime 2 seconds
-    poison speed = 1
-    bomb speed = 2
-    hay speed = 2
-level up when 30 seconds passed
+Anudder Typing Game: April Gong
 '''
 
 def onAppStart(app):
@@ -34,56 +22,14 @@ def onAppStart(app):
     app.textY = app.height * 3 // 4
     app.scoreX = app.width // 10
     app.scoreY = app.height // 15
+    app.levelX = app.width * 9 // 10
+    app.levelY = app.height // 15
     app.dangerous = 200
     app.threshold = app.height * 3 // 4
     app.titlepg = makeCMUImage(app, "title.png")
     app.bg = app.titlepg
 
-    app.cows = [Cow(generateRandX(), generateRandY(650, 700)), Cow(generateRandX(), 
-                                                                   generateRandY(650, 700))]
-    app.objects = []
-    app.projectiles = []
-    app.wordToObject = dict()
-    app.objToSpeed = {"poison": 1,
-                      "hay": 2,
-                      "bomb": 2}
-
-    app.input = ""
-    app.correctTyped = False
-
-    # cow related words
-    lst = ["pasture", "shepherd", "bonanza",
-           "moooooo", "milk", "udders", "bovine", "cattle", "heifer", "dairy",
-           "grazing", "hooves", "calves", "holstein", "angus", "jersey", "hereford",
-           "brahman", "charolais", "limousin", "simmental", "highland", "shorthorn",
-           "ayrshire", "longhorn", "dexter", "beef", "manure", "barn", "silage", 
-           "grazing", "livestock", "muzzle", "bullpen", "meadow", "field",
-           "pastoral", "ranch", "agriculture", "milkmaid", "lactation", "ruminant",
-           "herefordshire", "stockyard", "bovinophile", "bovinophobia", "milkshake",
-           "cheesemaking", "clover", "meadowlark", "mootivation", "moosic", "cowcatcher",
-           "cowpox", "cowabunga", "cowpoke"]
-
-    # generate 100 more random words
-    app.wordList = WordList(lst, 100)
-    app.missedWords = set()
-
-    app.projR = 5
-    app.projSteps = 15
-    app.projX = app.textX
-    app.projY = app.textY
-
-    app.counter = 0
-    app.score = 0
-    app.losses = 0
-    app.wins = 0
-
-    app.inGame = False
-    # level increases every 30 seconds
-    app.level = 1
-    app.totalLevels = 10
-    app.gameOver = False
-    app.paused = False
-    app.instructions = False
+    restart(app)
 
 def restart(app):
     app.cows = [Cow(generateRandX(), generateRandY(650, 700)), Cow(generateRandX(), 
@@ -142,6 +88,8 @@ def redrawAll(app):
         # draw score
         drawLabel(f'Score: {int(app.score)}', app.scoreX, app.scoreY, font='monospace',
                   bold=True)
+        drawLabel(f'Level: {app.level}', app.levelX, app.levelY, font='monospace',
+                  bold=True)
         # draw cows
         drawCows(app)
         if app.inGame and not app.paused:
@@ -156,6 +104,8 @@ def redrawAll(app):
         elif app.gameOver:
             drawLabel("GAME OVER", app.width//2, app.height//2, font='monospace', 
                       bold=True, size=24)
+            drawLabel(f"Final Score: {app.score}", app.width//2, app.height//2+150,
+                      font='monospace', bold=True, size=16)
             drawLabel("Press space to restart", app.width//2, app.height//2+100,
                       font='monospace', bold=True, size=16)
 
@@ -166,7 +116,6 @@ def drawFalling(app):
         # draw the word on the object
         # draw hit words in red
         hitInd = obj.word.hit
-        # drawLabel(obj.word.word, obj.x+25, obj.y+60, align='center', size=16)
         drawLabel(obj.word.word[:hitInd] + " " * (len(obj.word.word)-hitInd), obj.x+25, obj.y+60, 
                     align="center", size=16, fill="red", font='monospace', bold=True)
         drawLabel(" " * (hitInd+1) + obj.word.word[hitInd:], obj.x+25, obj.y+60, align="center", 
@@ -263,7 +212,7 @@ def onStep(app):
                 cow.randCowMove(app.stepsPerSecond, max(0, cow.x-100), 
                                 min(app.width, cow.x+100), max(650, cow.y-100), 
                                 min(750, cow.y+100))
-    elif not app.start and not app.gameOver:
+    elif not app.start and not app.gameOver and not app.instructions:
         # level display counter
         if app.counter >= app.stepsPerSecond * 3:
             app.inGame = True
@@ -413,9 +362,8 @@ def predictObjPos(obj, steps):
         stepsToLimit = (obj.x - obj.leftLimit) // obj.xSpeed
     # moving right
     elif obj.xMove > 0:
-        stepsToLimit = (obj.rightLimit - obj.x) // obj.xSpeed
+        stepsToLimit = (obj.rightLimit - obj.x) / obj.xSpeed
     stepsAfterLimit = steps - stepsToLimit 
-    # print(f'current x: {obj.x}, rightLimit: {obj.rightLimit}, leftLimit: {obj.leftLimit}, xMove: {obj.xMove}, xSpeed: {obj.xSpeed}, stepsAcrossMove: {stepsAcrossMove}, stepsToLimit: {stepsToLimit}, stepsAfterLimit: {stepsAfterLimit}')
     # doesn't change directions
     if stepsAfterLimit <= 0:
         if obj.xMove < 0:
@@ -423,13 +371,14 @@ def predictObjPos(obj, steps):
         else:
             x = obj.x + obj.xSpeed * steps
     else:
-        runs = steps // stepsAfterLimit
+        runs = steps / stepsAfterLimit
         stepsFromLimit = stepsAfterLimit % stepsAcrossMove
         # equivalent to turning around once and going back, same dir
         if (runs % 2 == 1 and obj.xMove < 0) or (runs % 2 == 0 and obj.xMove > 0):
-            x = obj.rightLimit - stepsFromLimit
+            x = obj.rightLimit - abs(stepsFromLimit)
         else:
-            x = obj.leftLimit + stepsFromLimit
+            x = obj.leftLimit + abs(stepsFromLimit)
+        print(f'runs: {runs}, stepsFromLimit: {stepsFromLimit}')
     return x, y
 
 def addProjectile(app, hitObj):

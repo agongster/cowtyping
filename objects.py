@@ -1,12 +1,57 @@
-from wordfreq import word_frequency
-from wonderwords import RandomWord
 from cmu_graphics import *
 from PIL import Image
 import random
 
 
-R = RandomWord()
+class WordFrequency:
 
+    def __init__(self, txtFile):
+        self.txtFile = txtFile
+        self.readFile()
+        # word: frequency
+        self.wordToFrequency = dict()
+        self.fillDict()
+        self.allWords = list(self.wordToFrequency.keys())
+
+    def readFile(self):
+        with open(self.txtFile, 'r') as f:
+            fileString = f.read()
+        self.fileList = fileString.splitlines()
+    
+    def fillDict(self):
+        for wordGroup in self.fileList:
+            extracted = wordGroup.split(',')
+            # remove init ( from first word elem
+            word = extracted[0][1:]
+            # get rid of ) from last elem
+            frequency = int(extracted[2][:-1])
+            self.wordToFrequency[word] = frequency
+            self.totalWords = frequency + 1
+
+    # returns a set of random words of certain length
+    def genRandomWords(self, setLength):
+        randomWords = set()
+        for i in range(setLength):
+            randWord = random.choice(self.allWords)
+            randomWords.add(randWord)
+        return randomWords
+    
+    # divide words into groupNum groups, each group with same frequency
+    def getScaledFreq(self, word, groupNum):
+        # groups 1-10
+        if word in self.wordToFrequency:
+            # higher frequency = lower difficulty
+            frequency = self.wordToFrequency[word]
+            wordsPerGroup = self.totalWords // groupNum
+            freqRank = (frequency // wordsPerGroup) + 1
+        else:
+            freqRank = 0
+        return freqRank
+    
+
+# word frequency txt file referenced from https://number27.org/assets/misc/words.txt
+# by Jonathan Harris: https://jjh.org/ in https://number27.org/assets/
+wordFreq = WordFrequency('words.txt')
 
 class WordList:
 
@@ -16,12 +61,13 @@ class WordList:
         self.listOfWords = self.intoWords()
         self.onScreen = set()
         self.listLength = listLength
+        self.wordToIndex = dict()
         self.genRandomList()
         self.difficultySort()
         self.removedWordToIndex = dict()
     
     def __repr__(self):
-        string = 'hi'
+        string = ''
         for word in self.listOfWords:
             string += f'{word.word}: {word.difficulty}, '
         return string
@@ -42,26 +88,20 @@ class WordList:
                 self.onScreen.remove(screenWord)
 
     def removeWord(self, word):
-        for i in range(len(self.listOfWords)):
-            if self.listOfWords[i].word == word:
-                self.removedWordToIndex[word] = i
-                self.listOfWords.pop(i)
-                break
+        wordInd = self.wordToIndex[Word(word, False)]
+        self.listOfWords.pop(wordInd)
         if word in self.wordSet:
              self.wordSet.remove(word)
-        self.wordList = list(self.wordSet)
 
     def addWord(self, word):
         if word not in self.wordSet:
-            if word.word in self.removedWordToIndex:
-                i = self.removedWordToIndex[word.word]
-                self.listOfWords.insert(i, word)
+            i = self.wordToIndex[word]
+            self.listOfWords.insert(i, word)
             self.wordSet.add(word)
-            self.wordList.append(word)
 
     def genRandomList(self):
-        for i in range(self.listLength):
-            nextWord = R.word()
+        randWordsSet = wordFreq.genRandomWords(self.listLength)
+        for nextWord in randWordsSet:
             # add non-repeating words in list
             if nextWord not in self.wordSet:
                 self.wordSet.add(nextWord)
@@ -72,6 +112,9 @@ class WordList:
     def difficultySort(self):
         self.listOfWords = sorted(self.listOfWords, 
         key=lambda word:word.difficulty)
+        for i in range(len(self.listOfWords)):
+            word = self.listOfWords[i]
+            self.wordToIndex[word] = i
 
     # get sublist depending on game level
     # corresponding difficulty + player's missed words
@@ -90,7 +133,7 @@ class Word:
     def __init__(self, word, onScreen):
         self.word = word
         self.onScreen = onScreen
-        self.frequency = word_frequency(word, 'en')
+        self.frequency = wordFreq.getScaledFreq(word, 10)
         self.hit = 0
         self.difficulty = self.getDifficulty()
 
@@ -105,21 +148,10 @@ class Word:
 
     def getDifficulty(self):
         length = len(self.word)
-        # length + convert frequency to number between 0 and 10
+        # length + frequency between 0 and 10
         # 0 is highest frequency (lower difficulty), 10 lowest frequency
-        freqScore = self.decimalPlaces()
+        freqScore = self.frequency
         return length + freqScore
-
-    # return how many decimal places frequency is
-    def decimalPlaces(self):
-        if self.frequency == 0.0:
-            return 10
-        n = self.frequency
-        places = 0
-        while n < 1:
-            n *= 10
-            places += 1
-        return places
 
 class Cow:
 
@@ -213,6 +245,8 @@ class FallingObject:
         elif objType == "bomb":
             self.image = FallingObject.makeCMUImage(FallingObject.bomb)
             self.closeImage = FallingObject.makeCMUImage(FallingObject.closeBomb)
+        elif objType == "wolf":
+            self.image = "wolf"
         else:
             self.image = None
 
